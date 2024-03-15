@@ -7,7 +7,7 @@ class CTTS(nn.Module):
     Class for our CTTS model
     """
     def __init__(self, device, kernel_size=16, stride=8, padding=0, d_model=128, nhead=4, enc_layers=4, dim_feedforward=512, dropout=0.3):
-        super().__init__(*args, **kwargs)
+        super().__init__()
         # params
         self.kernel_size = kernel_size
         self.stride = stride

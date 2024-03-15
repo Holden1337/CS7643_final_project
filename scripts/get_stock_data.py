@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 api_key = "BMd3CY940NNG3r9_reWCzTBbXc1cy2Oi"
 client = RESTClient(api_key)
 
-from_date = "2024-11-29"
+#from_date = "2024-11-29"
 to_date = "2024-12-30"
 
 constituents = pd.read_csv("constituents.csv")
