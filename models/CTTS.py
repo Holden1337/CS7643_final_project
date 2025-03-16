@@ -21,7 +21,7 @@ class CTTS(nn.Module):
 
 
         # model layers
-        self.cnn_layer = nn.Conv1d(device=self.device, in_channels=1, out_channels=1, kernel_size=self.kernel_size,
+        self.cnn_layer = nn.Conv1d(device=self.device, in_channels=1, out_channels=128, kernel_size=self.kernel_size,
                                     stride=self.stride, padding=self.padding)
         
 
@@ -29,7 +29,7 @@ class CTTS(nn.Module):
         # kind of like the transformer project but instead of two embedding layers (word and position) we only need one since
         # the cnn is doing the "token" embedding
         # reason i have the TODO is that I'm not sure about the dimensions
-        self.pos_embed_layer = nn.Embedding(num_embeddings=80, embedding_dim=128, device=self.device)
+        self.pos_embed_layer = nn.Embedding(num_embeddings=9, embedding_dim=128, device=self.device)
 
         # transformer layer
         self.encoder_layer = nn.TransformerEncoderLayer(d_model=self.d_model, nhead=self.nhead, dim_feedforward=self.dim_feedforward,
@@ -41,7 +41,7 @@ class CTTS(nn.Module):
         #TODO: might want to experiment with more linear layers
         # in the paper it just says "MLP" in the diagram, they don't say how many
         # layers they used.
-        self.final_layer = nn.Linear(in_features=self.d_model, out_features=3)
+        self.final_layer = nn.Linear(in_features=self.d_model, out_features=3, device=self.device)
 
     
     def forward(self, x):
@@ -59,14 +59,33 @@ class CTTS(nn.Module):
         :param x: torch tensor of size (figure this out later) time series input batch
         :return outputs: torch tensor of size (figure this out later) output of CTTS model
         """
+        batch_size, _, ts_length = x.shape
+        token_embed = self.cnn_layer(x)
+        token_embed = token_embed.permute(0, 2, 1)
 
-        #token_embed = self.cnn_layer(x)
         # figure out positional embedding here
-        #pos_embed = self.pos_embed_layer(some_input)
-        #embedding = torch.add(token_embed, pos_embed)
+        pos_embed_input = torch.arange(9, device=self.device).unsqueeze(0).expand(batch_size, -1)
+        pos_embed = self.pos_embed_layer(pos_embed_input)
+        embedding = torch.add(token_embed, pos_embed)
 
-        # transformer_output = self.transformer_encoder(embedding)
+        transformer_output = self.transformer_encoder(embedding).to(self.device)
 
-        #mlp_output = self.final_layer(transformer_output)
+        mlp_input = transformer_output.mean(dim=1).to(self.device)
 
-        # return mlp_output
+        mlp_output = self.final_layer(mlp_input)
+
+        return mlp_output
+    
+
+if __name__ == "__main__":
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+
+    print(f"Using Device: {device}")
+
+    test_input = torch.randn(64, 1, 80).to(device)
+    ctts_class = CTTS(device=device)
+    print(ctts_class.forward(test_input))
+
