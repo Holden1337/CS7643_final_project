@@ -19,7 +19,6 @@ import utils
 class bounding_boxes:
 
     def __init__(self):
-        # self.dataset = foz.load_zoo_dataset("coco-2017", split="validation", max_samples=1)
         self.IMAGE_DIR = './data/images/train2017'
         self.OUTPUT_DIR = './data/features/train2017'
         self.TOP_K = 36
@@ -61,9 +60,6 @@ class bounding_boxes:
             image = Image.open(image_path).convert("RGB")
             image_tensor = eval_transform(image).to(self.device)
             images = [image_tensor]
-
-            # get first image in dataset citation: https://docs.voxel51.com/api/fiftyone.core.dataset.html?highlight=first#fiftyone.core.dataset.Dataset.first
-            # image = read_image(self.dataset.first().filepath)
 
             self.model.eval()
             with torch.no_grad():
@@ -110,7 +106,6 @@ class bounding_boxes:
     def display_output(self, output_image):
         plt.figure(figsize=(12, 12))
         plt.imshow(output_image.permute(1, 2, 0))
-
 
 if __name__ == "__main__":
     bb = bounding_boxes()
