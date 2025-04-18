@@ -47,17 +47,19 @@ class Vocabulary:
     def __len__(self):
         return len(self.word2idx)
 
-def load_coco_captions(json_path):
-    with open(json_path, 'r') as f:
-        data = json.load(f)
-    # Only need the captions for the vocab
-    captions = [ann['caption'] for ann in data['annotations']]
-    return captions
+    def load_coco_captions(self, json_path):
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        # Only need the captions for the vocab
+        captions = [ann['caption'] for ann in data['annotations']]
+        return captions
 
-coco_json = '../data/annotations/captions_train2017.json'
-captions = load_coco_captions(coco_json)
+if __name__=='__main__':
+    vocab = Vocabulary(min_freq=5)
 
-vocab = Vocabulary(min_freq=5)
-vocab.build_vocab(captions)
+    coco_json = '../models/data/annotations/captions_train2017.json'
+    captions = vocab.load_coco_captions(coco_json)
 
-print(vocab.)
+    vocab.build_vocab(captions)
+
+    print(vocab)
