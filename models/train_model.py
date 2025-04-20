@@ -14,7 +14,7 @@ from scripts.build_vocab import Vocabulary
 from LSTM import UpDownCaptionerText
 import time
 from torch.nn.utils.rnn import pad_sequence
-
+import pandas as pd
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("You are using device: %s" % device)
@@ -83,6 +83,9 @@ criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 
 NUM_EPOCHS = 20
 
+train_loss_arr = []
+val_loss_arr = []
+
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device='cuda'):
     model.to(device)
     print("BEGINNING MODEL TRAINING...")
@@ -110,6 +113,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             print(running_train_loss)
 
         epoch_train_loss = running_train_loss / len(train_loader.dataset)
+        train_loss_arr.append(epoch_train_loss)
 
         # waiting until we get .pt files to uncomment this
         # model.eval()
@@ -122,10 +126,15 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         #         running_val_loss += loss.item() * features.size(0)
 
         #epoch_val_loss = running_val_loss / len(val_loader.dataset)
+        val_loss_arr.append(epoch_val_loss)
 
         print(f"Epoch [{epoch+1}/{num_epochs}] "
               f"Train Loss: {epoch_train_loss:.4f} "
               f"Val Loss: {0}")
+    loss_df = pd.DataFrame()
+    loss_df['train_loss'] = train_loss_arr
+    loss_df['val_loss'] = val_loss_arr
+    loss_df.to_csv("loss_df.csv", index=False)
         
 val_loader = None
 train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=NUM_EPOCHS, device='cuda')
