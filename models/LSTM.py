@@ -9,17 +9,20 @@ class UpDownCaptionerAttention(nn.Module):
         self.hidden_att = nn.Linear(hidden_dim, attention_dim)
         self.full_att = nn.Linear(attention_dim, 1)
 
-    def forward(self, features, hidden_state):
+    def forward(self, features, hidden_state, feature_mask=None):
         att1 = self.feature_att(features)
         att2 = self.hidden_att(hidden_state).unsqueeze(1)
         att = F.relu(att1 + att2)
         e = self.full_att(att).squeeze(2)
+
+        if feature_mask is not None:
+            e = e.masked_fill(~feature_mask, -1e9)
         alpha = F.softmax(e, dim=1)
         context = (features * alpha.unsqueeze(2)).sum(dim=1)
         return context, alpha
 
 class UpDownCaptionerText(nn.Module):
-    def __init__(self, vocab_size, feature_dim=2048, embed_dim=512, hidden_dim=512, attention_dim=512):
+    def __init__(self, vocab_size, feature_dim=256, embed_dim=512, hidden_dim=512, attention_dim=512):
         super(UpDownCaptionerText, self).__init__()
 
         self.hidden_dim = hidden_dim
@@ -29,7 +32,7 @@ class UpDownCaptionerText(nn.Module):
         self.lang_lstm = nn.LSTMCell(feature_dim + hidden_dim, hidden_dim)
         self.fc = nn.Linear(hidden_dim, vocab_size)
 
-    def forward(self, features, captions):
+    def forward(self, features, captions, feature_mask=None):
         batch_size = features.size(0)
         device = features.device
 
@@ -42,7 +45,7 @@ class UpDownCaptionerText(nn.Module):
         outputs = []
         for t in range(captions.size(1)):
             word_embed = embeddings[:, t, :]
-            context, _ = self.attention(features, h_att)
+            context, _ = self.attention(features, h_att, feature_mask)
             att_lstm_input = torch.cat([h_lang, context, word_embed], dim=1)
             h_att, c_att = self.att_lstm(att_lstm_input, (h_att, c_att))
             lang_lstm_input = torch.cat([context, h_att], dim=1)

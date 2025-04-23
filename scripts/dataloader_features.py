@@ -9,6 +9,7 @@ import sys
 import time
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from scripts.build_vocab import Vocabulary
+from torch.nn.utils.rnn import pad_sequence
 
 class COCODatasetWithFeatures(Dataset):
     def __init__(self, captions_file, features_dir, vocab, transform=None):
@@ -42,10 +43,11 @@ class COCODatasetWithFeatures(Dataset):
         """
         image_id = annotation['image_id']
         image_filename = self.image_id_to_filename[image_id]
+        feature_filename = image_filename.replace(".jpg", ".pt")
         # made temp folder with images that also have .pt files available
-        image_path = os.path.join("../models/data/images/train2017_temp/", image_filename)
-
-        return os.path.exists(image_path) 
+        image_path = os.path.join("../models/data/images/train2017/", image_filename)
+        feature_path = os.path.join("../models/data/image_features/train2017/train2017/" + feature_filename)
+        return os.path.exists(image_path) and os.path.exists(feature_path)
 
     def __getitem__(self, idx):
         annotation = self.annotations[idx]
@@ -76,7 +78,7 @@ if __name__ == "__main__":
     captions = vocab.load_coco_captions(coco_json)
     vocab.build_vocab(captions)
     captions_file = "../models/data/annotations/captions_train2017.json"
-    features_dir = "../models/data/image_features/train2017/"
+    features_dir = "../models/data/image_features/train2017/train2017"
 
 
     def collate_fn(batch):
@@ -88,12 +90,48 @@ if __name__ == "__main__":
         captions = torch.nn.utils.rnn.pad_sequence(captions, batch_first=True)
 
         return list(features), captions  # return features as a list to handle variable shapes
+    
+
+
+    def collate_fn_with_padding(batch):
+        features, captions = zip(*batch)
+
+        max_len = max(f.shape[0] for f in features)
+        padded_features = []
+        feature_masks = []
+
+        for f in features:
+            # Need to detach before stacking since pytorch is weird about that
+            # that and create the padding tensors
+            f = f.detach() if f.requires_grad else f
+            #print(f.shape)
+            pad_len = max_len - f.shape[0]
+            padded = torch.cat([f, torch.zeros(pad_len, f.shape[1])], dim=0)
+            padded_features.append(padded)
+            mask = torch.cat([torch.ones(f.shape[0]), torch.zeros(pad_len)])
+            feature_masks.append(mask)
+
+        features_tensor = torch.stack(padded_features)
+        feature_masks_tensor = torch.stack(feature_masks)
+
+        feature_masks_tensor = feature_masks_tensor.to(torch.bool)
+
+        batch_size, num_boxes, feat_dim = features_tensor.shape  # feat_dim = 12544
+        features_tensor = features_tensor.view(batch_size, num_boxes, 256, 7, 7)  # [B, 36, 256, 7, 7]
+        features_tensor = features_tensor.mean(dim=[3, 4])  # Mean over H and W → [B, 36, 256]
+
+        captions_tensor = pad_sequence(captions, batch_first=True, padding_value=0)
+
+        return features_tensor, feature_masks_tensor, captions_tensor
 
     test = COCODatasetWithFeatures(captions_file=captions_file, features_dir=features_dir, vocab=vocab)
 
-    val_loader = DataLoader(test, batch_size=4, shuffle=False, num_workers=4, collate_fn=collate_fn)
+    val_loader = DataLoader(test, batch_size=32, shuffle=False, num_workers=4, collate_fn=collate_fn_with_padding)
 
-    for features, captions in val_loader:
-        print(f"features[1].shape: {features[1].shape}")
-        print(captions[1])
+
+    for features, features_masks, captions in val_loader:
+        print(f"features[1].shape: {features.shape}")
+        print(f"feature masks.shape: {features_masks.shape}")
+        print(features_masks.dtype)
+        #print(captions[1])
         break

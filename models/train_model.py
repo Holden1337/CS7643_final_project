@@ -26,7 +26,7 @@ vocab = Vocabulary(min_freq=5)
 captions = vocab.load_coco_captions(coco_json)
 vocab.build_vocab(captions)
 captions_file = "../models/data/annotations/captions_train2017.json"
-features_dir = "../models/data/image_features/train2017/"
+features_dir = "../models/data/image_features/train2017/train2017"
 
 
 def collate_fn_with_padding(batch):
@@ -54,6 +54,12 @@ def collate_fn_with_padding(batch):
     features_tensor = torch.stack(padded_features)
     feature_masks_tensor = torch.stack(feature_masks)
 
+    feature_masks_tensor = feature_masks_tensor.to(torch.bool)
+
+    batch_size, num_boxes, feat_dim = features_tensor.shape  
+    features_tensor = features_tensor.view(batch_size, num_boxes, 256, 7, 7)  
+    features_tensor = features_tensor.mean(dim=[3, 4])  
+
     captions_tensor = pad_sequence(captions, batch_first=True, padding_value=0)
 
     return features_tensor, feature_masks_tensor, captions_tensor
@@ -69,11 +75,11 @@ train_loader = DataLoader(train_set, batch_size=4, shuffle=False, num_workers=4,
 
 for features, features_masks, captions in train_loader:
     # use this to check that the data loader went ok
-    print(f"features shape: {features.shape}")
-    print(captions[0])
+    #print(f"features shape: {features.shape}")
+    #print(captions[0])
     break
 
-model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=12544)
+model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256)
 
 # using Adam to start, might try other stuff later.
 optimizer = torch.optim.Adam(model.parameters())
@@ -96,10 +102,10 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         for features, features_mask_tensor, captions in train_loader:
             
             
-            features, captions = features.to(device), captions.to(device)
+            features, features_mask_tensor, captions = features.to(device),features_mask_tensor.to(device), captions.to(device)
 
             optimizer.zero_grad()
-            outputs = model(features, captions)
+            outputs = model(features, captions, feature_mask=features_mask_tensor)
             
             outputs = outputs.reshape(-1, outputs.shape[-1])
             captions = captions.reshape(-1)
@@ -110,7 +116,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
             optimizer.step()
 
             running_train_loss += loss.item() * features.size(0)  # sum over batch
-            print(running_train_loss)
+            #print(running_train_loss)
 
         epoch_train_loss = running_train_loss / len(train_loader.dataset)
         train_loss_arr.append(epoch_train_loss)
@@ -126,7 +132,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         #         running_val_loss += loss.item() * features.size(0)
 
         #epoch_val_loss = running_val_loss / len(val_loader.dataset)
-        val_loss_arr.append(epoch_val_loss)
+        val_loss_arr.append(0)
 
         print(f"Epoch [{epoch+1}/{num_epochs}] "
               f"Train Loss: {epoch_train_loss:.4f} "
@@ -135,6 +141,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     loss_df['train_loss'] = train_loss_arr
     loss_df['val_loss'] = val_loss_arr
     loss_df.to_csv("loss_df.csv", index=False)
+    torch.save(model.state_dict(), 'model_weights.pth')
         
 val_loader = None
 train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=NUM_EPOCHS, device='cuda')
