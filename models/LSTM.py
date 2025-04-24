@@ -67,7 +67,7 @@ class UpDownCaptionerText(nn.Module):
 
         
 
-        inputs = torch.tensor([start_idx], device='cuda')
+        inputs = torch.tensor([[start_idx]] * batch_size, device='cuda')
         pred_caption = [] 
 
         for _ in range(max_len):
@@ -82,7 +82,7 @@ class UpDownCaptionerText(nn.Module):
 
             output = self.fc(h_lang)
             predicted_word = output.argmax(dim=1, keepdim=True)
-            print(predicted_word)
+            #print(predicted_word)
             pred_caption.append(predicted_word)
 
             inputs = predicted_word

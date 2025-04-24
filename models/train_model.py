@@ -140,18 +140,20 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
         with torch.no_grad():
             for features_val, features_mask_tensor_val, captions_val in val_loader:
                 features_val, features_mask_tensor_val, captions_val = features_val.to(device), features_mask_tensor_val.to(device), captions_val.to(device)
-                outputs_val = model.predict_caption(features_val, captions_val, feature_mask=features_mask_tensor_val, start_idx=1, max_len=20)
+                outputs_val = model.forward(features_val, captions_val, feature_mask=features_mask_tensor_val)
+                #print(f"outputs_val.shape:{outputs_val.shape}")
+                #time.sleep(300)
                 outputs_val = outputs_val.view(-1, vocab_size)
                 captions_val = captions_val.view(-1)
-                loss = criterion(outputs_val, captions_val)
-                running_val_loss += loss.item() * features.size(0)
+                val_loss = criterion(outputs_val, captions_val)
+                running_val_loss += val_loss.item() * features_val.size(0)
 
         epoch_val_loss = running_val_loss / len(val_loader.dataset)
         val_loss_arr.append(epoch_val_loss)
 
         print(f"Epoch [{epoch+1}/{num_epochs}] "
               f"Train Loss: {epoch_train_loss:.4f} "
-              f"Val Loss: {0}")
+              f"Val Loss: {epoch_val_loss:.4f}")
     loss_df = pd.DataFrame()
     loss_df['train_loss'] = train_loss_arr
     loss_df['val_loss'] = val_loss_arr
