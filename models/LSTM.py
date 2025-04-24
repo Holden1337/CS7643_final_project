@@ -56,7 +56,7 @@ class UpDownCaptionerText(nn.Module):
         outputs = torch.stack(outputs, dim=1)
         return outputs
     
-    def predict_caption(self, features, curr_caption, max_len=20):
+    def predict_caption(self, features, feature_mask, start_idx, max_len=20):
         batch_size = features.size(0)
         device = features.device
 
@@ -65,12 +65,14 @@ class UpDownCaptionerText(nn.Module):
         h_lang = torch.zeros(batch_size, self.hidden_dim).to(device)
         c_lang = torch.zeros(batch_size, self.hidden_dim).to(device)
 
-        pred_caption = []
-        inputs = curr_caption
+        
+
+        inputs = torch.tensor([start_idx], device='cuda')
+        pred_caption = [] 
 
         for _ in range(max_len):
             word_embed = self.embedding(inputs).squeeze(1)
-            context, _ = self.attention(features, h_att)
+            context, _ = self.attention(features, h_att, feature_mask)
 
             att_lstm_input = torch.cat([h_lang, context, word_embed], dim=1)
             h_att, c_att = self.att_lstm(att_lstm_input, (h_att, c_att))
@@ -80,6 +82,7 @@ class UpDownCaptionerText(nn.Module):
 
             output = self.fc(h_lang)
             predicted_word = output.argmax(dim=1, keepdim=True)
+            print(predicted_word)
             pred_caption.append(predicted_word)
 
             inputs = predicted_word

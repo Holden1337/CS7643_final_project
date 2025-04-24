@@ -66,12 +66,17 @@ def collate_fn_with_padding(batch):
 
 
 train_set = COCODatasetWithFeatures(captions_file=captions_file, features_dir=features_dir, vocab=vocab)
-train_loader = DataLoader(train_set, batch_size=4, shuffle=False, num_workers=4, collate_fn=collate_fn_with_padding)
+train_loader = DataLoader(train_set, batch_size=64, shuffle=False, num_workers=4, collate_fn=collate_fn_with_padding)
 
+
+captions_file_val = "../models/data/annotations/captions_val2017.json"
+features_dir_val = "../models/data/image_features/val2017/val2017"
 
 # don't have .pt files for val set
-# val_set = COCODatasetWithFeatures(captions_file=captions_file, features_dir=features_dir, vocab=vocab)
-# val_loader = DataLoader(val_set, batch_size=4, shuffle=False, num_workers=4, collate_fn=collate_fn)
+val_set = COCODatasetWithFeatures(captions_file=captions_file_val, features_dir=features_dir_val, vocab=vocab, train=False)
+val_loader = DataLoader(val_set, batch_size=64, shuffle=False, num_workers=4, collate_fn=collate_fn_with_padding)
+
+print(f"val set len: {len(val_loader.dataset)}")
 
 for features, features_masks, captions in train_loader:
     # use this to check that the data loader went ok
@@ -82,17 +87,16 @@ for features, features_masks, captions in train_loader:
 model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256)
 
 # using Adam to start, might try other stuff later.
-optimizer = torch.optim.Adam(model.parameters())
+optimizer = torch.optim.AdamW(model.parameters(), weight_decay=1e-3)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
-PAD_IDX = 1
+PAD_IDX = 0
 criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 
-NUM_EPOCHS = 20
-
+NUM_EPOCHS = 10
 train_loss_arr = []
 val_loss_arr = []
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device='cuda'):
+def train_model(model, train_loader, val_loader, vocab_size, criterion, optimizer, num_epochs, device='cuda'):
     model.to(device)
     print("BEGINNING MODEL TRAINING...")
     for epoch in range(num_epochs):
@@ -106,9 +110,18 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 
             optimizer.zero_grad()
             outputs = model(features, captions, feature_mask=features_mask_tensor)
-            
-            outputs = outputs.reshape(-1, outputs.shape[-1])
-            captions = captions.reshape(-1)
+
+            # print(f"outputs.shape before reshape: {outputs.shape}")
+            # print(f"captions.shape before reshape: {captions.shape}")
+            # print(f"captions[0]: {captions[0]}")
+            outputs = outputs.view(-1, vocab_size)
+            captions = captions.view(-1)
+
+            # print(f"outputs.shape: {outputs.shape}")
+            # print(f"captions.shape: {captions.shape}")
+            # print(captions)
+            # print(f"outputs[0]: {outputs[0]}")
+            # time.sleep(50)
 
 
             loss = criterion(outputs, captions)
@@ -122,17 +135,19 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         train_loss_arr.append(epoch_train_loss)
 
         # waiting until we get .pt files to uncomment this
-        # model.eval()
-        # running_val_loss = 0.0
-        # with torch.no_grad():
-        #     for features, captions in val_loader:
-        #         features, captions = features.to(device), captions.to(device)
-        #         outputs = model(features, captions)
-        #         loss = criterion(outputs, captions)
-        #         running_val_loss += loss.item() * features.size(0)
+        model.eval()
+        running_val_loss = 0.0
+        with torch.no_grad():
+            for features_val, features_mask_tensor_val, captions_val in val_loader:
+                features_val, features_mask_tensor_val, captions_val = features_val.to(device), features_mask_tensor_val.to(device), captions_val.to(device)
+                outputs_val = model.predict_caption(features_val, captions_val, feature_mask=features_mask_tensor_val, start_idx=1, max_len=20)
+                outputs_val = outputs_val.view(-1, vocab_size)
+                captions_val = captions_val.view(-1)
+                loss = criterion(outputs_val, captions_val)
+                running_val_loss += loss.item() * features.size(0)
 
-        #epoch_val_loss = running_val_loss / len(val_loader.dataset)
-        val_loss_arr.append(0)
+        epoch_val_loss = running_val_loss / len(val_loader.dataset)
+        val_loss_arr.append(epoch_val_loss)
 
         print(f"Epoch [{epoch+1}/{num_epochs}] "
               f"Train Loss: {epoch_train_loss:.4f} "
@@ -143,5 +158,5 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     loss_df.to_csv("loss_df.csv", index=False)
     torch.save(model.state_dict(), 'model_weights.pth')
         
-val_loader = None
-train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=NUM_EPOCHS, device='cuda')
+#val_loader = None
+train_model(model, train_loader, val_loader, len(vocab), criterion, optimizer, num_epochs=NUM_EPOCHS, device='cuda')

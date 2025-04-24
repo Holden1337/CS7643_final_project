@@ -12,14 +12,15 @@ from scripts.build_vocab import Vocabulary
 from torch.nn.utils.rnn import pad_sequence
 
 class COCODatasetWithFeatures(Dataset):
-    def __init__(self, captions_file, features_dir, vocab, transform=None):
+    def __init__(self, captions_file, features_dir, vocab, transform=None, train=True):
         with open(captions_file, 'r') as f:
             captions_data = json.load(f)
 
         self.features_dir = features_dir
         self.captions_file = captions_file
 
-        
+        self.train = train
+
         self.image_id_to_filename = {
             img['id']: img['file_name'] for img in captions_data['images']
         }
@@ -32,7 +33,7 @@ class COCODatasetWithFeatures(Dataset):
         self.features_dir = features_dir
         self.vocab = vocab
         self.transform = transform
-
+        
     def __len__(self):
         return len(self.annotations)
     
@@ -45,8 +46,12 @@ class COCODatasetWithFeatures(Dataset):
         image_filename = self.image_id_to_filename[image_id]
         feature_filename = image_filename.replace(".jpg", ".pt")
         # made temp folder with images that also have .pt files available
-        image_path = os.path.join("../models/data/images/train2017/", image_filename)
-        feature_path = os.path.join("../models/data/image_features/train2017/train2017/" + feature_filename)
+        if self.train:
+            image_path = os.path.join("../models/data/images/train2017/", image_filename)
+            feature_path = os.path.join("../models/data/image_features/train2017/train2017/" + feature_filename)
+        else:
+            image_path = os.path.join("../models/data/images/val2017/", image_filename)
+            feature_path = os.path.join("../models/data/image_features/val2017/val2017/" + feature_filename)
         return os.path.exists(image_path) and os.path.exists(feature_path)
 
     def __getitem__(self, idx):
