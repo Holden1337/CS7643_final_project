@@ -66,7 +66,7 @@ def collate_fn_with_padding(batch):
 
 
 train_set = COCODatasetWithFeatures(captions_file=captions_file, features_dir=features_dir, vocab=vocab)
-train_loader = DataLoader(train_set, batch_size=64, shuffle=False, num_workers=4, collate_fn=collate_fn_with_padding)
+train_loader = DataLoader(train_set, batch_size=64, shuffle=True, num_workers=4, collate_fn=collate_fn_with_padding)
 
 
 captions_file_val = "../models/data/annotations/captions_val2017.json"
@@ -108,14 +108,21 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
             
             features, features_mask_tensor, captions = features.to(device),features_mask_tensor.to(device), captions.to(device)
 
+            num_pad = (captions == PAD_IDX).sum().item()
+            #print(f"{num_pad}/{captions.numel()} tokens are PAD")
+
+            inputs = captions[:, :-1]  # Remove last token
+            targets = captions[:, 1:]  # Remove start token
+
+
             optimizer.zero_grad()
-            outputs = model(features, captions, feature_mask=features_mask_tensor)
+            outputs = model(features, inputs, feature_mask=features_mask_tensor)
 
             # print(f"outputs.shape before reshape: {outputs.shape}")
             # print(f"captions.shape before reshape: {captions.shape}")
             # print(f"captions[0]: {captions[0]}")
-            outputs = outputs.view(-1, vocab_size)
-            captions = captions.view(-1)
+            #outputs = outputs.reshape(-1, vocab_size)
+            #captions = captions.reshape(-1)
 
             # print(f"outputs.shape: {outputs.shape}")
             # print(f"captions.shape: {captions.shape}")
@@ -124,8 +131,9 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
             # time.sleep(50)
 
 
-            loss = criterion(outputs, captions)
+            loss = criterion(outputs.reshape(-1, vocab_size), targets.reshape(-1))
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
 
             running_train_loss += loss.item() * features.size(0)  # sum over batch
@@ -140,12 +148,16 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
         with torch.no_grad():
             for features_val, features_mask_tensor_val, captions_val in val_loader:
                 features_val, features_mask_tensor_val, captions_val = features_val.to(device), features_mask_tensor_val.to(device), captions_val.to(device)
-                outputs_val = model.forward(features_val, captions_val, feature_mask=features_mask_tensor_val)
+
+                inputs_val = captions_val[:, :-1]  # Remove last token
+                targets_val = captions_val[:, 1:]  # Remove start token
+
+                outputs_val = model.forward(features_val, inputs_val, feature_mask=features_mask_tensor_val)
                 #print(f"outputs_val.shape:{outputs_val.shape}")
                 #time.sleep(300)
-                outputs_val = outputs_val.view(-1, vocab_size)
-                captions_val = captions_val.view(-1)
-                val_loss = criterion(outputs_val, captions_val)
+                #outputs_val = outputs_val.view(-1, vocab_size)
+                #captions_val = captions_val.view(-1)
+                val_loss = criterion(outputs_val.reshape(-1, vocab_size), targets_val.reshape(-1))
                 running_val_loss += val_loss.item() * features_val.size(0)
 
         epoch_val_loss = running_val_loss / len(val_loader.dataset)

@@ -115,11 +115,13 @@ def grab_image_caption_features(n, model, vocab, device='cuda'):
     test = model.predict_caption(features_tensor, feature_masks_tensor, start_idx, max_len=20)
     print(f"test[0][0]: {test[0][0]}")
     print(f"word = {vocab.idx2word[int(test[0][0])]}")
-    print(test)
+    l = test[0].tolist()
+    for i in l:
+        print(vocab.idx2word[i])
     # Display the image using Matplotlib
-    # plt.imshow(image_tensor.permute(1, 2, 0))
-    # plt.axis('off') # Turn off axis labels
-    # plt.show()
+    plt.imshow(image_tensor.permute(1, 2, 0))
+    plt.axis('off') # Turn off axis labels
+    plt.show()
 
 
 grab_image_caption_features(n, model=model, vocab=vocab)
