@@ -35,7 +35,7 @@ features_dir = "../models/data/image_features/train2017/train2017"
 images_dir = "../models/data/images/train2017/"
 
 
-model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256)
+model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256, attention_dim=1024)
 model.load_state_dict(torch.load('model_weights.pth'))
 
 
@@ -104,17 +104,23 @@ def grab_image_caption_features(n, model, vocab, device='cuda'):
 
     start_idx = vocab.word2idx['<start>']
     pad_idx = vocab.word2idx['<pad>']
-    print(f"vocab.idx2word[1]: {vocab.idx2word[1]}")
-    print(f"pad_idx: {pad_idx}")
-    print(f"start_idx: {start_idx}")
-    print(f"padded_features.shape: {features_tensor.shape}")
-    print(f"mask.shape: {feature_masks_tensor.shape}")
+    #print(f"vocab.idx2word[1]: {vocab.idx2word[1]}")
+    #print(f"pad_idx: {pad_idx}")
+    #print(f"start_idx: {start_idx}")
+    #print(f"padded_features.shape: {features_tensor.shape}")
+    #print(f"mask.shape: {feature_masks_tensor.shape}")
 
-    print(len(vocab))
-
+    #print(len(vocab))
+    #print(f"features_tensor.shape: {features_tensor.shape}")
+    #print(f"features_mask_tensor: {feature_masks_tensor.shape}")
+    features_tensor = torch.zeros_like(features_tensor)
+    feature_masks_tensor = torch.zeros_like(feature_masks_tensor)
+    features_tensor = features_tensor.to(device)
+    print(f"torch.sum(features_tensor): {torch.sum(features_tensor)}")
+    feature_masks_tensor = feature_masks_tensor.to(device)
     test = model.predict_caption(features_tensor, feature_masks_tensor, start_idx, max_len=20)
-    print(f"test[0][0]: {test[0][0]}")
-    print(f"word = {vocab.idx2word[int(test[0][0])]}")
+    #print(f"test[0][0]: {test[0][0]}")
+    #print(f"word = {vocab.idx2word[int(test[0][0])]}")
     l = test[0].tolist()
     for i in l:
         print(vocab.idx2word[i])

@@ -44,6 +44,7 @@ def collate_fn_with_padding(batch):
     for f in features:
         # Need to detach before stacking since pytorch is weird about that
         # that and create the padding tensors
+        # This might also be one of the things causing the issue
         f = f.detach() if f.requires_grad else f
         pad_len = max_len - f.shape[0]
         padded = torch.cat([f, torch.zeros(pad_len, f.shape[1])], dim=0)
@@ -84,10 +85,10 @@ for features, features_masks, captions in train_loader:
     #print(captions[0])
     break
 
-model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256)
+model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256, attention_dim=1024)
 
 # using Adam to start, might try other stuff later.
-optimizer = torch.optim.AdamW(model.parameters(), weight_decay=1e-3)
+optimizer = torch.optim.AdamW(model.parameters(), weight_decay=1e-2)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
 PAD_IDX = 0
 criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
@@ -109,26 +110,15 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
             features, features_mask_tensor, captions = features.to(device),features_mask_tensor.to(device), captions.to(device)
 
             num_pad = (captions == PAD_IDX).sum().item()
-            #print(f"{num_pad}/{captions.numel()} tokens are PAD")
 
+
+            # This might be one of the things that could be causing the issue
             inputs = captions[:, :-1]  # Remove last token
             targets = captions[:, 1:]  # Remove start token
 
 
             optimizer.zero_grad()
             outputs = model(features, inputs, feature_mask=features_mask_tensor)
-
-            # print(f"outputs.shape before reshape: {outputs.shape}")
-            # print(f"captions.shape before reshape: {captions.shape}")
-            # print(f"captions[0]: {captions[0]}")
-            #outputs = outputs.reshape(-1, vocab_size)
-            #captions = captions.reshape(-1)
-
-            # print(f"outputs.shape: {outputs.shape}")
-            # print(f"captions.shape: {captions.shape}")
-            # print(captions)
-            # print(f"outputs[0]: {outputs[0]}")
-            # time.sleep(50)
 
 
             loss = criterion(outputs.reshape(-1, vocab_size), targets.reshape(-1))
@@ -142,21 +132,19 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
         epoch_train_loss = running_train_loss / len(train_loader.dataset)
         train_loss_arr.append(epoch_train_loss)
 
-        # waiting until we get .pt files to uncomment this
+
         model.eval()
         running_val_loss = 0.0
         with torch.no_grad():
             for features_val, features_mask_tensor_val, captions_val in val_loader:
                 features_val, features_mask_tensor_val, captions_val = features_val.to(device), features_mask_tensor_val.to(device), captions_val.to(device)
 
+                # again, this might be causing the issue
                 inputs_val = captions_val[:, :-1]  # Remove last token
                 targets_val = captions_val[:, 1:]  # Remove start token
 
                 outputs_val = model.forward(features_val, inputs_val, feature_mask=features_mask_tensor_val)
-                #print(f"outputs_val.shape:{outputs_val.shape}")
-                #time.sleep(300)
-                #outputs_val = outputs_val.view(-1, vocab_size)
-                #captions_val = captions_val.view(-1)
+
                 val_loss = criterion(outputs_val.reshape(-1, vocab_size), targets_val.reshape(-1))
                 running_val_loss += val_loss.item() * features_val.size(0)
 
