@@ -11,10 +11,15 @@ class UpDownCaptionerAttention(nn.Module):
         self.full_att = nn.Linear(attention_dim, 1)
 
     def forward(self, features, hidden_state, feature_mask=None):
+        # print(f"hidden_state.shape: {hidden_state.shape}")
+        # print(f"features.shape: {features.shape}")
         att1 = self.feature_att(features)
         att2 = self.hidden_att(hidden_state).unsqueeze(1)
         att = F.tanh(att1 + att2)
         e = self.full_att(att).squeeze(2)
+
+        # print(f"e.shape: {e.shape}")
+        # print(f"feature_mask.shape: {feature_mask.shape}")
  
         if feature_mask is not None:
             e = e.masked_fill(~feature_mask, -1e9)
@@ -46,22 +51,36 @@ class UpDownCaptionerText(nn.Module):
         c_lang = torch.zeros(batch_size, self.hidden_dim).to(device)
 
         features = self.feature_proj(features)
+        #print(f"FEATURES SHAPE: {features.shape}")
+        #features = features.mean(dim=1)
         outputs = []
         for t in range(captions.size(1)):
             word_embed = embeddings[:, t, :]
             # print(f"features.shape: {features.shape}")
             # print(f"features_mask: {feature_mask}")
             #time.sleep(40)
-            context, _ = self.attention(features, h_att, feature_mask)
-            att_lstm_input = torch.cat([h_lang, context, word_embed], dim=1)
+
+            # print(f"h_lang.shape: {h_lang.shape}")
+            # print(f"features.shape: {features.shape}")
+            # print(f"word_embed.shape: {word_embed.shape}")
+            # time.sleep(50)
+            #features = features.mean(dim=1)
+            mean_features = features.mean(dim=1)
+
+            att_lstm_input = torch.cat([h_lang, mean_features, word_embed], dim=1)
             h_att, c_att = self.att_lstm(att_lstm_input, (h_att, c_att))
             h_att_dropout = self.dropout(h_att)
+
+            # Now attend using the current attention LSTM hidden state
+            context, _ = self.attention(features, h_att, feature_mask)
+
             lang_lstm_input = torch.cat([context, h_att_dropout], dim=1)
             h_lang, c_lang = self.lang_lstm(lang_lstm_input, (h_lang, c_lang))
             output = self.fc(h_lang)
             outputs.append(output)
 
         outputs = torch.stack(outputs, dim=1)
+        print(f"outputs.shape: {outputs.shape}")
         return outputs
     
     def predict_caption(self, features, feature_mask, start_idx, max_len=20):
