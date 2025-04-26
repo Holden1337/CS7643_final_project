@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 
+softmax = nn.Softmax(dim=1)
 class UpDownCaptionerAttention(nn.Module):
     def __init__(self, feature_dim, hidden_dim, attention_dim):
         super(UpDownCaptionerAttention, self).__init__()
@@ -32,13 +33,14 @@ class UpDownCaptionerText(nn.Module):
         super(UpDownCaptionerText, self).__init__()
 
         self.hidden_dim = hidden_dim
-        self.embedding = nn.Embedding(vocab_size, embed_dim)
+        self.vocab_size = vocab_size
+        self.embedding = nn.Embedding(self.vocab_size, embed_dim)
         self.feature_proj = nn.Linear(feature_dim, 2048)
         self.attention = UpDownCaptionerAttention(2048, hidden_dim, attention_dim)
         self.att_lstm = nn.LSTMCell(embed_dim + 2048 + hidden_dim, hidden_dim)
         self.lang_lstm = nn.LSTMCell(2048 + hidden_dim, hidden_dim)
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(hidden_dim, vocab_size)
+        self.fc = nn.Linear(hidden_dim, self.vocab_size)
 
     def forward(self, features, captions, feature_mask=None):
         batch_size = features.size(0)
@@ -80,51 +82,35 @@ class UpDownCaptionerText(nn.Module):
             outputs.append(output)
 
         outputs = torch.stack(outputs, dim=1)
-        print(f"outputs.shape: {outputs.shape}")
+        #print(f"outputs.shape: {outputs.shape}")
         return outputs
     
-    def predict_caption(self, features, feature_mask, start_idx, max_len=20):
+    def predict_caption(self, features, feature_mask, pad_idx, max_len=20):
         batch_size = features.size(0)
         device = features.device
 
-        h_att = torch.zeros(batch_size, self.hidden_dim).to(device)
-        c_att = torch.zeros(batch_size, self.hidden_dim).to(device)
-        h_lang = torch.zeros(batch_size, self.hidden_dim).to(device)
-        c_lang = torch.zeros(batch_size, self.hidden_dim).to(device)
-        features = self.feature_proj(features)
+       
+        #features = self.feature_proj(features)
+        outputs = torch.zeros((batch_size, max_len, self.vocab_size), device=device)
+
+        captions = torch.full((batch_size, max_len), pad_idx, device=device)
+        captions[:, 0:2] = 1 # make captions start with start token
         
 
-        inputs = torch.tensor([[start_idx]] * batch_size, device='cuda')
-        pred_caption = [] 
+        for t in range(max_len):
+            preds = self.forward(features, captions, feature_mask)
+            outputs[:, t, :] = preds[:, t, :]
+
+            if t < max_len - 1:
+                indices = softmax(preds[:, t, :]).argmax(dim=1, keepdim=True)
+                captions[:, t+1] = indices
+        print(f"captions: {captions}")
+
+        print(f"outputs.shape: {outputs.shape}")
+
+        return outputs
         
 
-        for _ in range(max_len):
-            word_embed = self.embedding(inputs).squeeze(1)
 
-            mean_features = features.mean(dim=1)
             
-
-            att_lstm_input = torch.cat([h_lang, mean_features, word_embed], dim=1)
-            h_att, c_att = self.att_lstm(att_lstm_input, (h_att, c_att))
-            h_att_dropout = self.dropout(h_att)
-            context, _ = self.attention(features, h_att, feature_mask)
-
-            print(f"h_att: {h_att}")
-            print(f"c_att: {c_att}")
-
-            lang_lstm_input = torch.cat([context, h_att_dropout], dim=1)
-            h_lang, c_lang = self.lang_lstm(lang_lstm_input, (h_lang, c_lang))
-            #print(f"h_lang: {h_lang}")
-            #print(f"c_lang: {c_lang}")
-            output = self.fc(h_lang)
-            if len(pred_caption) > 0:
-                output[:, start_idx] = float('-inf')  # Suppress <sos>
-            predicted_word = output.argmax(dim=1, keepdim=True)
-            #print(predicted_word)
-            pred_caption.append(predicted_word)
-
-            inputs = predicted_word
-
-        pred_caption = torch.cat(pred_caption, dim=1)
-        return pred_caption
 

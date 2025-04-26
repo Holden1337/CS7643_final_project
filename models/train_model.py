@@ -64,7 +64,7 @@ features_dir = "../models/data/image_features/train2017/train2017"
 #     return features_tensor, feature_masks_tensor, captions_tensor
 
 
-
+softmax = nn.Softmax(dim=1)
 
 def collate_fn_with_padding(batch):
     """
@@ -162,13 +162,27 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
 
             optimizer.zero_grad()
             outputs = model(features, captions, feature_mask=feature_mask_tensor)
-            print(f"outputs.shape: {outputs.shape}")
-            print(f"captions.shape: {captions.shape}")
-            print(f"outputs.reshape(-1, vocab_size).shape: {outputs.reshape(-1, vocab_size).shape}")
-            print(f"captions.reshape(-1).shape: {captions.reshape(-1).shape}")
-            print(f"outputs.reshape(-1, vocab_size): {outputs.reshape(-1, vocab_size)}")
-            print(f"captions.reshape(-1): {captions.reshape(-1)}")
-            time.sleep(50)
+            # print(f"outputs.shape: {outputs.shape}")
+            # print(f"captions.shape: {captions.shape}")
+            # print(f"outputs.reshape(-1, vocab_size).shape: {outputs.reshape(-1, vocab_size).shape}")
+            # print(f"captions.reshape(-1).shape: {captions.reshape(-1).shape}")
+            # print(f"outputs.reshape(-1, vocab_size): {outputs.reshape(-1, vocab_size)}")
+            # print(f"captions.reshape(-1): {captions.reshape(-1)}")
+            # print("**********************************************************************")
+            # print(f"outputs[0][0:5]: {outputs[0][0:5]}")
+            # print(f"captons[0][0:5]: {captions[0][0:5]}")
+            # print("*********************************************************************")
+
+            softmax_output = softmax(outputs[0][0:8])
+            idxs = softmax_output.argmax(dim=1, keepdim=True)
+            idxs = [int(x[0]) for x in idxs]
+            guess = [vocab.idx2word[idx] for idx in idxs]
+            idxs_real = [int(x) for x in captions[0][0:8]]
+            real = [vocab.idx2word[idx] for idx in idxs_real]
+            print("**********************************************")
+            print(f"Predicted caption: {guess}")
+            print(f"Actual caption: {real}")
+            print("**********************************************")
             loss = criterion(outputs.reshape(-1, vocab_size), captions.reshape(-1))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
@@ -194,12 +208,12 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
 
 
                 # again, this might be causing the issue
-                inputs_val = captions_val[:, :-1]  # Remove last token
-                targets_val = captions_val[:, 1:]  # Remove start token
+                # inputs_val = captions_val[:, :-1]  # Remove last token
+                # targets_val = captions_val[:, 1:]  # Remove start token
 
-                outputs_val = model.forward(features_val, inputs_val, feature_mask=feature_mask_tensor_val)
+                outputs_val = model.forward(features_val, captions_val, feature_mask=feature_mask_tensor_val)
 
-                val_loss = criterion(outputs_val.reshape(-1, vocab_size), targets_val.reshape(-1))
+                val_loss = criterion(outputs_val.reshape(-1, vocab_size), captions_val.reshape(-1))
                 running_val_loss += val_loss.item() * features_val.size(0)
 
         epoch_val_loss = running_val_loss / len(val_loader.dataset)
