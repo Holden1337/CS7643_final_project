@@ -96,18 +96,29 @@ class UpDownCaptionerText(nn.Module):
 
         inputs = torch.tensor([[start_idx]] * batch_size, device='cuda')
         pred_caption = [] 
+        
 
         for _ in range(max_len):
             word_embed = self.embedding(inputs).squeeze(1)
+
+            mean_features = features.mean(dim=1)
+            
+
+            att_lstm_input = torch.cat([h_lang, mean_features, word_embed], dim=1)
+            h_att, c_att = self.att_lstm(att_lstm_input, (h_att, c_att))
+            h_att_dropout = self.dropout(h_att)
             context, _ = self.attention(features, h_att, feature_mask)
 
-            att_lstm_input = torch.cat([h_lang, context, word_embed], dim=1)
-            h_att, c_att = self.att_lstm(att_lstm_input, (h_att, c_att))
+            print(f"h_att: {h_att}")
+            print(f"c_att: {c_att}")
 
-            lang_lstm_input = torch.cat([context, h_att], dim=1)
+            lang_lstm_input = torch.cat([context, h_att_dropout], dim=1)
             h_lang, c_lang = self.lang_lstm(lang_lstm_input, (h_lang, c_lang))
-
+            #print(f"h_lang: {h_lang}")
+            #print(f"c_lang: {c_lang}")
             output = self.fc(h_lang)
+            if len(pred_caption) > 0:
+                output[:, start_idx] = float('-inf')  # Suppress <sos>
             predicted_word = output.argmax(dim=1, keepdim=True)
             #print(predicted_word)
             pred_caption.append(predicted_word)

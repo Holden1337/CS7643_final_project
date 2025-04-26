@@ -30,9 +30,9 @@ coco_json = '../models/data/annotations/captions_train2017.json'
 vocab = Vocabulary(min_freq=5)
 captions = vocab.load_coco_captions(coco_json)
 vocab.build_vocab(captions)
-captions_file = "../models/data/annotations/captions_val2017.json"
-features_dir = "../models/data/image_features/val2017/val2017"
-images_dir = "../models/data/images/val2017/"
+captions_file = "../models/data/annotations/captions_train2017.json"
+features_dir = "../models/data/image_features/train2017/train2017"
+images_dir = "../models/data/images/train2017/"
 
 
 model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256, attention_dim=1024)
@@ -54,8 +54,8 @@ def is_valid_sample(annotation):
     image_filename = image_id_to_filename[image_id]
     feature_filename = image_filename.replace(".jpg", ".pt")
     # made temp folder with images that also have .pt files available
-    image_path = os.path.join("../models/data/images/val2017/", image_filename)
-    feature_path = os.path.join("../models/data/image_features/val2017/val2017/" + feature_filename)
+    image_path = os.path.join("../models/data/images/train2017/", image_filename)
+    feature_path = os.path.join("../models/data/image_features/train2017/train2017/" + feature_filename)
     return os.path.exists(image_path) and os.path.exists(feature_path)
 
 
@@ -72,8 +72,8 @@ def grab_image_caption_features(n, model, vocab, device='cuda'):
     image_id = annotation['image_id']
     image_filename = image_id_to_filename[image_id]
     feature_filename = image_filename.replace(".jpg", ".pt")
-    image_path = os.path.join("../models/data/images/val2017/", image_filename)
-    feature_path = os.path.join("../models/data/image_features/val2017/val2017/" + feature_filename)
+    image_path = os.path.join("../models/data/images/train2017/", image_filename)
+    feature_path = os.path.join("../models/data/image_features/train2017/train2017/" + feature_filename)
 
     # Load the image
     image_tensor = torchvision.io.read_image(image_path)
