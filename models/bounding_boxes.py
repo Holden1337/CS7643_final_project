@@ -1,6 +1,5 @@
 from torchvision.utils import draw_bounding_boxes
 from torchvision.transforms import v2 as T
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.ops import roi_align
 from torchvision.io import read_image
 from torchvision import transforms
@@ -52,10 +51,14 @@ class bounding_boxes:
         eval_transform = self.get_transform(train=False)
 
         # Loop through images
-        for i, image_file in enumerate(tqdm(os.listdir(self.IMAGE_DIR))):
-            # Setting a low number of images for testing
-            if i >= 5:
-                break
+        for image_file in tqdm(os.listdir(self.IMAGE_DIR)):
+            save_path = os.path.join(self.OUTPUT_DIR, image_file.replace('.jpg', '.pt'))
+
+            # os.path.exists citation: https://docs.python.org/3/library/os.path.html#os.path.exists
+            # Skip generating the .pt file if it already exists
+            if os.path.exists(save_path):
+                continue
+
             image_path = os.path.join(self.IMAGE_DIR, image_file)
             image = Image.open(image_path).convert("RGB")
             image_tensor = eval_transform(image).to(self.device)
@@ -74,23 +77,26 @@ class bounding_boxes:
                 # Output the top 36 results
                 pred["boxes"] = pred["boxes"][start_filter][:self.TOP_K]
 
+                # If there are no confidence intervals above the threshold, skip the image
+                if pred["boxes"].shape[0] == 0:
+                    continue
+
             image = (255.0 * (image_tensor - image_tensor.min()) /
                     (image_tensor.max() - image_tensor.min())).to(torch.uint8)
             pred_boxes = pred["boxes"].long()
 
             output_image = draw_bounding_boxes(image, pred_boxes, colors="red")
 
-
             # Extract features
             outputs = self.model(images)
-            boxes = outputs[0]['boxes'][:self.TOP_K]
 
             all_feature_maps = self.model.backbone(image_tensor.unsqueeze(0))
             first_feature_map = all_feature_maps['0']
 
+            # Determine regions of interest
             region_feats = roi_align(
                 first_feature_map,
-                [boxes],
+                [pred["boxes"]],
                 output_size=(7, 7),
                 spatial_scale=1/32,
                 sampling_ratio=2
@@ -98,7 +104,6 @@ class bounding_boxes:
 
             region_feats = region_feats.view(region_feats.size(0), -1)
 
-            save_path = os.path.join(self.OUTPUT_DIR, image_file.replace('.jpg', '.pt'))
             torch.save(region_feats.cpu(), save_path)
 
         return output_image
