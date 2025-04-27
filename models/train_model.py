@@ -122,7 +122,7 @@ model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256, attention_di
 optimizer = torch.optim.AdamW(model.parameters(), weight_decay=1e-2)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
 PAD_IDX = 0
-criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
+criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX, reduction='sum')
 
 
 NUM_EPOCHS = 3
@@ -163,7 +163,7 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
             optimizer.zero_grad()
             outputs = model(features, captions, feature_mask=feature_mask_tensor)
             # print(f"outputs.shape: {outputs.shape}")
-            # print(f"captions.shape: {captions.shape}")
+            #print(f"captions.shape: {captions.shape}")
             # print(f"outputs.reshape(-1, vocab_size).shape: {outputs.reshape(-1, vocab_size).shape}")
             # print(f"captions.reshape(-1).shape: {captions.reshape(-1).shape}")
             # print(f"outputs.reshape(-1, vocab_size): {outputs.reshape(-1, vocab_size)}")
@@ -173,24 +173,31 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
             # print(f"captons[0][0:5]: {captions[0][0:5]}")
             # print("*********************************************************************")
 
-            softmax_output = softmax(outputs[0][0:8])
-            idxs = softmax_output.argmax(dim=1, keepdim=True)
-            idxs = [int(x[0]) for x in idxs]
-            guess = [vocab.idx2word[idx] for idx in idxs]
-            idxs_real = [int(x) for x in captions[0][0:8]]
-            real = [vocab.idx2word[idx] for idx in idxs_real]
-            print("**********************************************")
-            print(f"Predicted caption: {guess}")
-            print(f"Actual caption: {real}")
-            print("**********************************************")
+            # softmax_output = softmax(outputs[0][0:8])
+            # idxs = softmax_output.argmax(dim=1, keepdim=True)
+            # idxs = [int(x[0]) for x in idxs]
+            # guess = [vocab.idx2word[idx] for idx in idxs]
+            # idxs_real = [int(x) for x in captions[0][0:8]]
+            # real = [vocab.idx2word[idx] for idx in idxs_real]
+            #print("**********************************************")
+            #print(f"Predicted caption: {guess}")
+            #print(f"Actual caption: {real}")
+            #print("**********************************************")
+            #time.sleep(50)
             loss = criterion(outputs.reshape(-1, vocab_size), captions.reshape(-1))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
+            
 
             running_train_loss += loss.item() * features.size(0)  # sum over batch
             #print(running_train_loss)
 
+
+        test_caption = model.predict_caption(features, feature_mask=feature_mask_tensor, start_idx=1, max_len=20)
+        idxs = [int(x) for x in test_caption[0]]
+        guess = [vocab.idx2word[idx] for idx in idxs]
+        print(f"Sample caption for Epoch: {epoch} : {guess} \n")
         epoch_train_loss = running_train_loss / len(train_loader.dataset)
         train_loss_arr.append(epoch_train_loss)
 
@@ -213,7 +220,13 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
 
                 outputs_val = model.forward(features_val, captions_val, feature_mask=feature_mask_tensor_val)
 
+
+
                 val_loss = criterion(outputs_val.reshape(-1, vocab_size), captions_val.reshape(-1))
+                test_caption = model.predict_caption(features_val, feature_mask=feature_mask_tensor_val, start_idx=1, max_len=20)
+                idxs = [int(x) for x in test_caption[0]]
+                guess = [vocab.idx2word[idx] for idx in idxs]
+                print(f"Sample caption for Epoch: {epoch} : {guess} \n")
                 running_val_loss += val_loss.item() * features_val.size(0)
 
         epoch_val_loss = running_val_loss / len(val_loader.dataset)

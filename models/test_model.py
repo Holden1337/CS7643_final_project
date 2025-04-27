@@ -120,10 +120,13 @@ def grab_image_caption_features(n, model, vocab, device='cuda'):
     features_tensor = features_tensor.to(device)
     print(f"torch.sum(features_tensor): {torch.sum(features_tensor)}")
     feature_masks_tensor = feature_masks_tensor.to(device)
-    outputs = model.predict_caption(features_tensor, feature_masks_tensor, 0, max_len=20)
-    softmax_output = softmax(outputs)
-    idxs = softmax_output.argmax(dim=1, keepdim=True)
-    print(idxs)
+    outputs = model.predict_caption(features_tensor, feature_masks_tensor, 1, max_len=20)
+    #softmax_output = softmax(outputs)
+    #idxs = softmax_output.argmax(dim=1, keepdim=True)
+    print(outputs[0])
+    idxs = [int(x) for x in outputs[0]]
+    guess = [vocab.idx2word[idx] for idx in idxs]
+    print(guess)
     #idxs_real = [int(x) for x in captions]
     #real = [vocab.idx2word[idx] for idx in idxs_real]
     #print(guess)

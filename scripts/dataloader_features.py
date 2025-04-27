@@ -100,6 +100,9 @@ if __name__ == "__main__":
 
     def collate_fn_with_padding(batch):
         features, captions = zip(*batch)
+        #print(len(features))
+        #for f in features:
+        #    print(f.shape)
 
         max_len = max(f.shape[0] for f in features)
         padded_features = []
@@ -135,8 +138,6 @@ if __name__ == "__main__":
 
 
     for features, features_masks, captions in val_loader:
-        print(f"features[1].shape: {features.shape}")
-        print(f"feature masks.shape: {features_masks.shape}")
-        print(features_masks.dtype)
-        #print(captions[1])
+        print(captions[1])
+        print(features.shape)
         break
