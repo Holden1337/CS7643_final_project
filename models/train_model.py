@@ -19,7 +19,6 @@ import pandas as pd
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("You are using device: %s" % device)
 
-
 coco_json = '../models/data/annotations/captions_train2017.json'
 
 vocab = Vocabulary(min_freq=5)
@@ -27,42 +26,6 @@ captions = vocab.load_coco_captions(coco_json)
 vocab.build_vocab(captions)
 captions_file = "../models/data/annotations/captions_train2017.json"
 features_dir = "../models/data/image_features/train2017/train2017"
-
-
-# def collate_fn_with_padding(batch):
-#     """
-#     Need to do this since not all images have 36 features. Just 
-#     pad some features with zero tensors
-#     probably need to incorporate this into LSTM.py somehow
-#     """
-#     features, captions = zip(*batch)
-
-#     max_len = max(f.shape[0] for f in features)
-#     padded_features = []
-#     feature_masks = []
-
-#     for f in features:
-#         f = f.detach() if f.requires_grad else f
-#         pad_len = max_len - f.shape[0]
-#         padded = torch.cat([f, torch.zeros(pad_len, f.shape[1])], dim=0)
-#         padded_features.append(padded)
-#         mask = torch.cat([torch.ones(f.shape[0]), torch.zeros(pad_len)])
-#         feature_masks.append(mask)
-
-#     features_tensor = torch.stack(padded_features)
-#     feature_masks_tensor = torch.stack(feature_masks)
-
-#     feature_masks_tensor = feature_masks_tensor.to(torch.bool)
-
-#     batch_size, num_boxes, feat_dim = features_tensor.shape  
-#     features_tensor = features_tensor.view(batch_size, num_boxes, 256, 7, 7)  
-#     features_tensor = features_tensor.mean(dim=[3, 4])  
-
-#     captions_tensor = pad_sequence(captions, batch_first=True, padding_value=0)
-    
-
-#     return features_tensor, feature_masks_tensor, captions_tensor
-
 
 softmax = nn.Softmax(dim=1)
 
@@ -79,6 +42,8 @@ def collate_fn_with_padding(batch):
 
     for f in features:
         f = f.detach() if f.requires_grad else f
+        f = f.view(f.shape[0], 256, 7, 7)
+        f = f.mean(dim=[2, 3])
         pad_len = max_len - f.shape[0]
         valid_box_counts.append(f.shape[0])
         padded = torch.cat([f, torch.zeros(pad_len, f.shape[1])], dim=0)
@@ -89,8 +54,8 @@ def collate_fn_with_padding(batch):
 
     # Reshape and mean-pool
     batch_size, num_boxes, feat_dim = features_tensor.shape
-    features_tensor = features_tensor.view(batch_size, num_boxes, 256, 7, 7)
-    features_tensor = features_tensor.mean(dim=[3, 4])  # Resulting shape: [batch_size, num_boxes, 256]
+    #features_tensor = features_tensor.view(batch_size, num_boxes, 256, 7, 7)
+    #features_tensor = features_tensor.mean(dim=[3, 4])  # Resulting shape: [batch_size, num_boxes, 256]
 
     captions_tensor = pad_sequence(captions, batch_first=True, padding_value=0)
 
@@ -116,13 +81,13 @@ for features, features_masks, captions in train_loader:
     #print(captions[0])
     break
 
-model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256, attention_dim=1024)
+model = UpDownCaptionerText(vocab_size=len(vocab), feature_dim=256, attention_dim=1024, hidden_dim=1024, embed_dim=1024)
 
 # using Adam to start, might try other stuff later.
-optimizer = torch.optim.AdamW(model.parameters(), weight_decay=1e-2)
+optimizer = torch.optim.AdamW(model.parameters(), weight_decay=1e-3)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
 PAD_IDX = 0
-criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX, reduction='sum')
+criterion = nn.CrossEntropyLoss(ignore_index=PAD_IDX)
 
 
 NUM_EPOCHS = 3
@@ -137,70 +102,27 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
         running_train_loss = 0.0
 
         for features, valid_box_counts, captions in train_loader:
-            
-            
             features, valid_box_counts, captions = features.to(device), valid_box_counts.to(device), captions.to(device)
-
             batch_size, num_boxes, _ = features.shape
 
             feature_mask_tensor = torch.arange(num_boxes, device=features.device).unsqueeze(0) < valid_box_counts.unsqueeze(1)
             feature_mask_tensor = feature_mask_tensor.bool()
 
-            #print(f"feature_mask_tensor.shape: {feature_mask_tensor.shape}")
-
-            #num_pad = (captions == PAD_IDX).sum().item()
-
-
-            # This might be one of the things that could be causing the issue
-            #print(f"captions[0]: {captions[0]}")
-            #time.sleep(50)
-
-
-            #inputs = captions[:, :-1]  # Remove last token
-            #targets = captions[:, 1:]  # Remove start token
-
+            inputs = captions[:, :-1]  # Remove last token
+            targets = captions[:, 1:]  # Remove start token
 
             optimizer.zero_grad()
-            outputs = model(features, captions, feature_mask=feature_mask_tensor)
-            # print(f"outputs.shape: {outputs.shape}")
-            #print(f"captions.shape: {captions.shape}")
-            # print(f"outputs.reshape(-1, vocab_size).shape: {outputs.reshape(-1, vocab_size).shape}")
-            # print(f"captions.reshape(-1).shape: {captions.reshape(-1).shape}")
-            # print(f"outputs.reshape(-1, vocab_size): {outputs.reshape(-1, vocab_size)}")
-            # print(f"captions.reshape(-1): {captions.reshape(-1)}")
-            # print("**********************************************************************")
-            # print(f"outputs[0][0:5]: {outputs[0][0:5]}")
-            # print(f"captons[0][0:5]: {captions[0][0:5]}")
-            # print("*********************************************************************")
-
-            # softmax_output = softmax(outputs[0][0:8])
-            # idxs = softmax_output.argmax(dim=1, keepdim=True)
-            # idxs = [int(x[0]) for x in idxs]
-            # guess = [vocab.idx2word[idx] for idx in idxs]
-            # idxs_real = [int(x) for x in captions[0][0:8]]
-            # real = [vocab.idx2word[idx] for idx in idxs_real]
-            #print("**********************************************")
-            #print(f"Predicted caption: {guess}")
-            #print(f"Actual caption: {real}")
-            #print("**********************************************")
-            #time.sleep(50)
-            loss = criterion(outputs.reshape(-1, vocab_size), captions.reshape(-1))
+            outputs = model(features, inputs, feature_mask=feature_mask_tensor)
+    
+            loss = criterion(outputs.reshape(-1, vocab_size), targets.reshape(-1))
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             
-
             running_train_loss += loss.item() * features.size(0)  # sum over batch
-            #print(running_train_loss)
 
-
-        test_caption = model.predict_caption(features, feature_mask=feature_mask_tensor, start_idx=1, max_len=20)
-        idxs = [int(x) for x in test_caption[0]]
-        guess = [vocab.idx2word[idx] for idx in idxs]
-        print(f"Sample caption for Epoch: {epoch} : {guess} \n")
         epoch_train_loss = running_train_loss / len(train_loader.dataset)
         train_loss_arr.append(epoch_train_loss)
-
 
         model.eval()
         running_val_loss = 0.0
@@ -215,18 +137,12 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
 
 
                 # again, this might be causing the issue
-                # inputs_val = captions_val[:, :-1]  # Remove last token
-                # targets_val = captions_val[:, 1:]  # Remove start token
+                inputs_val = captions_val[:, :-1]  # Remove last token
+                targets_val = captions_val[:, 1:]  # Remove start token
 
-                outputs_val = model.forward(features_val, captions_val, feature_mask=feature_mask_tensor_val)
+                outputs_val = model.forward(features_val, inputs_val, feature_mask=feature_mask_tensor_val)
 
-
-
-                val_loss = criterion(outputs_val.reshape(-1, vocab_size), captions_val.reshape(-1))
-                test_caption = model.predict_caption(features_val, feature_mask=feature_mask_tensor_val, start_idx=1, max_len=20)
-                idxs = [int(x) for x in test_caption[0]]
-                guess = [vocab.idx2word[idx] for idx in idxs]
-                print(f"Sample caption for Epoch: {epoch} : {guess} \n")
+                val_loss = criterion(outputs_val.reshape(-1, vocab_size), targets_val.reshape(-1))
                 running_val_loss += val_loss.item() * features_val.size(0)
 
         epoch_val_loss = running_val_loss / len(val_loader.dataset)
@@ -238,8 +154,7 @@ def train_model(model, train_loader, val_loader, vocab_size, criterion, optimize
     loss_df = pd.DataFrame()
     loss_df['train_loss'] = train_loss_arr
     loss_df['val_loss'] = val_loss_arr
-    loss_df.to_csv("loss_df.csv", index=False)
-    torch.save(model.state_dict(), 'model_weights.pth')
+    loss_df.to_csv("loss_df_2.csv", index=False)
+    torch.save(model.state_dict(), 'model_weights_2.pth')
         
-#val_loader = None
 train_model(model, train_loader, val_loader, len(vocab), criterion, optimizer, num_epochs=NUM_EPOCHS, device='cuda')
